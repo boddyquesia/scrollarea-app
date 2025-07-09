@@ -104,6 +104,15 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
 
       if (data.success) {
         setUser(data.user)
+        // Actualizar también el usuario en localStorage
+        localStorage.setItem("vecinetUser", JSON.stringify(data.user))
+
+        // Forzar re-render del avatar
+        setEditForm({
+          name: data.user.name,
+          bio: data.user.bio || "",
+          avatar_url: data.user.avatar_url || "",
+        })
         setIsEditDialogOpen(false)
         setUploadError("")
         console.log("✅ Profile updated successfully")
@@ -194,6 +203,16 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
     ))
   }
 
+  useEffect(() => {
+    if (user) {
+      setEditForm({
+        name: user.name,
+        bio: user.bio || "",
+        avatar_url: user.avatar_url || "",
+      })
+    }
+  }, [user])
+
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-600">
@@ -233,7 +252,11 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
               <CardHeader className="text-center">
                 <div className="relative inline-block">
                   <Avatar className="h-24 w-24 mx-auto mb-4">
-                    <AvatarImage src={user.avatar_url || "/placeholder.svg"} alt={user.name} />
+                    <AvatarImage
+                      src={user.avatar_url || "/placeholder.svg"}
+                      alt={user.name}
+                      key={user.avatar_url} // Agregar esta línea para forzar re-render
+                    />
                     <AvatarFallback className="text-2xl">{user.initials}</AvatarFallback>
                   </Avatar>
                 </div>

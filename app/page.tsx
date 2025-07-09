@@ -393,7 +393,11 @@ export default function CommunityApp({ onStartConversation }: CommunityAppProps)
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="flex items-center gap-2">
                     <Avatar className="h-6 w-6">
-                      <AvatarImage src={currentUser.avatar || "/placeholder.svg"} alt={currentUser.name} />
+                      <AvatarImage
+                        src={currentUser.avatar_url || currentUser.avatar || "/placeholder.svg"}
+                        alt={currentUser.name}
+                        key={currentUser.avatar_url} // Forzar re-render cuando cambie
+                      />
                       <AvatarFallback className="text-xs">{currentUser.initials}</AvatarFallback>
                     </Avatar>
                     <span className="hidden sm:inline">{currentUser.name}</span>
