@@ -25,6 +25,7 @@ import {
   Award,
   TrendingUp,
   Loader2,
+  AlertCircle,
 } from "lucide-react"
 
 const typeColors = {
@@ -54,6 +55,7 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [uploadError, setUploadError] = useState("")
   const [editForm, setEditForm] = useState({
     name: user?.name || "",
     bio: user?.bio || "",
@@ -103,14 +105,15 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
       if (data.success) {
         setUser(data.user)
         setIsEditDialogOpen(false)
+        setUploadError("")
         console.log("✅ Profile updated successfully")
       } else {
         console.error("❌ Profile update failed:", data.error)
-        alert("Error al actualizar el perfil: " + data.error)
+        setUploadError("Error al actualizar el perfil: " + data.error)
       }
     } catch (error) {
       console.error("💥 Profile update error:", error)
-      alert("Error al actualizar el perfil")
+      setUploadError("Error al actualizar el perfil")
     } finally {
       setIsSaving(false)
     }
@@ -123,28 +126,60 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
     console.log("📤 Starting image upload:", { name: file.name, size: file.size, type: file.type })
 
     setIsUploading(true)
+    setUploadError("")
+
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("bucket", "avatars")
-
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        console.log("✅ Image uploaded:", data.url)
-        setEditForm({ ...editForm, avatar_url: data.url })
-      } else {
-        console.error("❌ Upload failed:", data.error)
-        alert("Error al subir la imagen: " + data.error)
+      // Validaciones del lado del cliente
+      if (!file.type.startsWith("image/")) {
+        throw new Error("El archivo debe ser una imagen")
       }
+
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error("La imagen es demasiado grande (máximo 10MB)")
+      }
+
+      // Método 1: Intentar con la API
+      try {
+        console.log("🔄 Trying API upload...")
+        const formData = new FormData()
+        formData.append("file", file)
+
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          console.log("✅ API upload successful:", data.url.substring(0, 50) + "...")
+          setEditForm({ ...editForm, avatar_url: data.url })
+          return
+        } else {
+          console.log("❌ API upload failed:", data.error)
+          throw new Error(data.error || "Error en la API")
+        }
+      } catch (apiError) {
+        console.log("🔄 API failed, trying client-side conversion...")
+      }
+
+      // Método 2: Conversión del lado del cliente (fallback)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const result = e.target?.result as string
+        if (result) {
+          console.log("✅ Client-side conversion successful")
+          setEditForm({ ...editForm, avatar_url: result })
+        }
+      }
+      reader.onerror = () => {
+        throw new Error("Error al leer el archivo")
+      }
+      reader.readAsDataURL(file)
     } catch (error) {
       console.error("💥 Upload error:", error)
-      alert("Error al subir la imagen")
+      const errorMessage = error instanceof Error ? error.message : "Error desconocido"
+      setUploadError("Error al subir la imagen: " + errorMessage)
     } finally {
       setIsUploading(false)
     }
@@ -343,6 +378,14 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
             <DialogTitle>Editar Perfil</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Error Message */}
+            {uploadError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                <AlertCircle className="h-4 w-4" />
+                <span>{uploadError}</span>
+              </div>
+            )}
+
             {/* Avatar Upload */}
             <div className="text-center">
               <Avatar className="h-20 w-20 mx-auto mb-4">
@@ -379,6 +422,7 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
                     </>
                   )}
                 </Label>
+                <p className="text-xs text-gray-500 mt-2">JPG, PNG o GIF (máx. 10MB)</p>
               </div>
             </div>
 
@@ -406,7 +450,10 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
             <div className="flex gap-2 pt-4">
               <Button
                 variant="outline"
-                onClick={() => setIsEditDialogOpen(false)}
+                onClick={() => {
+                  setIsEditDialogOpen(false)
+                  setUploadError("")
+                }}
                 className="flex-1"
                 disabled={isSaving}
               >
