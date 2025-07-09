@@ -24,6 +24,7 @@ import {
   Mail,
   Award,
   TrendingUp,
+  Loader2,
 } from "lucide-react"
 
 const typeColors = {
@@ -51,36 +52,101 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
   const [user, setUser] = useState<any | null>(props.user ?? null)
   const [posts, setPosts] = useState<any[]>(props.posts ?? [])
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [editForm, setEditForm] = useState({
     name: user?.name || "",
     bio: user?.bio || "",
-    avatar: user?.avatar || "",
+    avatar_url: user?.avatar_url || "",
   })
 
   useEffect(() => {
     if (!user && typeof window !== "undefined") {
-      const storedUser = localStorage.getItem("vecinetUser")
-      if (storedUser) {
-        const u = JSON.parse(storedUser)
-        setUser(u)
-        // Filtra posts simulados (o podrías hacer fetch real)
-        const storedPosts = (window as any).__MOCK_POSTS__ ?? []
-        setPosts(storedPosts.filter((p: any) => p.user.id === u.id))
-      }
+      fetchUserProfile()
     }
   }, [user])
 
-  const handleSaveProfile = () => {
-    // En una app real, esto actualizaría el perfil en la API
-    console.log("Guardando perfil:", editForm)
-    setIsEditDialogOpen(false)
+  const fetchUserProfile = async () => {
+    try {
+      const response = await fetch("/api/users/me")
+      const data = await response.json()
+
+      if (data.success) {
+        setUser(data.user)
+        setEditForm({
+          name: data.user.name,
+          bio: data.user.bio || "",
+          avatar_url: data.user.avatar_url || "",
+        })
+        // Filtrar posts del usuario
+        const storedPosts = (window as any).__MOCK_POSTS__ ?? []
+        setPosts(storedPosts.filter((p: any) => p.user.id === data.user.id))
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error)
+    }
   }
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSaveProfile = async () => {
+    setIsSaving(true)
+    try {
+      const response = await fetch("/api/users/me", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(editForm),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setUser(data.user)
+        setIsEditDialogOpen(false)
+        console.log("✅ Profile updated successfully")
+      } else {
+        console.error("❌ Profile update failed:", data.error)
+        alert("Error al actualizar el perfil: " + data.error)
+      }
+    } catch (error) {
+      console.error("💥 Profile update error:", error)
+      alert("Error al actualizar el perfil")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file) {
-      const imageUrl = URL.createObjectURL(file)
-      setEditForm({ ...editForm, avatar: imageUrl })
+    if (!file) return
+
+    console.log("📤 Starting image upload:", { name: file.name, size: file.size, type: file.type })
+
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("bucket", "avatars")
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        console.log("✅ Image uploaded:", data.url)
+        setEditForm({ ...editForm, avatar_url: data.url })
+      } else {
+        console.error("❌ Upload failed:", data.error)
+        alert("Error al subir la imagen: " + data.error)
+      }
+    } catch (error) {
+      console.error("💥 Upload error:", error)
+      alert("Error al subir la imagen")
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -94,7 +160,14 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
   }
 
   if (!user) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-600">Cargando perfil…</div>
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-600">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Cargando perfil…</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -125,7 +198,7 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
               <CardHeader className="text-center">
                 <div className="relative inline-block">
                   <Avatar className="h-24 w-24 mx-auto mb-4">
-                    <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} />
+                    <AvatarImage src={user.avatar_url || "/placeholder.svg"} alt={user.name} />
                     <AvatarFallback className="text-2xl">{user.initials}</AvatarFallback>
                   </Avatar>
                 </div>
@@ -141,7 +214,7 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className="h-4 w-4 text-gray-500" />
-                    <span>Miembro desde {user.joinDate}</span>
+                    <span>Miembro desde {user.joinDate || "2024"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Mail className="h-4 w-4 text-gray-500" />
@@ -153,14 +226,14 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
                   <div className="text-center">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <TrendingUp className="h-4 w-4 text-blue-500" />
-                      <span className="font-semibold text-lg">{user.totalPosts}</span>
+                      <span className="font-semibold text-lg">{user.total_posts}</span>
                     </div>
                     <p className="text-xs text-gray-600">Publicaciones</p>
                   </div>
                   <div className="text-center">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <Award className="h-4 w-4 text-green-500" />
-                      <span className="font-semibold text-lg">{user.completedExchanges}</span>
+                      <span className="font-semibold text-lg">{user.completed_exchanges}</span>
                     </div>
                     <p className="text-xs text-gray-600">Intercambios</p>
                   </div>
@@ -216,7 +289,7 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
                         <p className="text-gray-600 mb-4">{post.description}</p>
 
                         {/* Images */}
-                        {post.images.length > 0 && (
+                        {post.images && post.images.length > 0 && (
                           <div className="grid grid-cols-2 gap-2 mb-4">
                             {post.images.map((image: string, index: number) => (
                               <img
@@ -273,7 +346,7 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
             {/* Avatar Upload */}
             <div className="text-center">
               <Avatar className="h-20 w-20 mx-auto mb-4">
-                <AvatarImage src={editForm.avatar || "/placeholder.svg"} alt={editForm.name} />
+                <AvatarImage src={editForm.avatar_url || "/placeholder.svg"} alt={editForm.name} />
                 <AvatarFallback className="text-lg">
                   {editForm.name
                     .split(" ")
@@ -288,13 +361,23 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
                   onChange={handleImageUpload}
                   className="hidden"
                   id="avatar-upload"
+                  disabled={isUploading}
                 />
                 <Label
                   htmlFor="avatar-upload"
                   className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 w-fit mx-auto"
                 >
-                  <Camera className="h-4 w-4" />
-                  <span>Cambiar foto</span>
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Subiendo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="h-4 w-4" />
+                      <span>Cambiar foto</span>
+                    </>
+                  )}
                 </Label>
               </div>
             </div>
@@ -305,6 +388,7 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                 placeholder="Tu nombre completo"
+                disabled={isSaving}
               />
             </div>
 
@@ -315,15 +399,28 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
                 onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
                 placeholder="Cuéntanos sobre ti..."
                 rows={3}
+                disabled={isSaving}
               />
             </div>
 
             <div className="flex gap-2 pt-4">
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="flex-1">
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+                className="flex-1"
+                disabled={isSaving}
+              >
                 Cancelar
               </Button>
-              <Button onClick={handleSaveProfile} className="flex-1">
-                Guardar
+              <Button onClick={handleSaveProfile} className="flex-1" disabled={isSaving || isUploading}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  "Guardar"
+                )}
               </Button>
             </div>
           </div>
