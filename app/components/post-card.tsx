@@ -45,6 +45,8 @@ import {
   RefreshCw,
 } from "lucide-react"
 
+import PostImages from "./post-images"
+
 const typeColors = {
   pedir: "bg-blue-100 text-blue-800 border-blue-200",
   ofrecer: "bg-green-100 text-green-800 border-green-200",
@@ -273,18 +275,7 @@ export default function PostCard({
           <p className="text-gray-600 mb-4">{post.description}</p>
 
           {/* Images */}
-          {post.images && post.images.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {post.images.map((image: string, index: number) => (
-                <img
-                  key={index}
-                  src={image || "/placeholder.svg"}
-                  alt={`Imagen ${index + 1}`}
-                  className="rounded-lg object-cover w-full h-32"
-                />
-              ))}
-            </div>
-          )}
+          {post.images && post.images.length > 0 && <PostImages images={post.images} postTitle={post.title} />}
 
           <div className="flex items-center justify-between">
             <Button variant="outline" size="sm" className="flex items-center gap-2 bg-transparent">

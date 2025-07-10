@@ -28,6 +28,8 @@ import {
   AlertCircle,
 } from "lucide-react"
 
+import PostImages from "../components/post-images"
+
 const typeColors = {
   pedir: "bg-blue-100 text-blue-800 border-blue-200",
   ofrecer: "bg-green-100 text-green-800 border-green-200",
@@ -348,16 +350,7 @@ export default function ProfilePage(props: Partial<ProfilePageProps>) {
 
                         {/* Images */}
                         {post.images && post.images.length > 0 && (
-                          <div className="grid grid-cols-2 gap-2 mb-4">
-                            {post.images.map((image: string, index: number) => (
-                              <img
-                                key={index}
-                                src={image || "/placeholder.svg"}
-                                alt={`Imagen ${index + 1}`}
-                                className="rounded-lg object-cover w-full h-32"
-                              />
-                            ))}
-                          </div>
+                          <PostImages images={post.images} postTitle={post.title} />
                         )}
 
                         <div className="flex items-center justify-between">

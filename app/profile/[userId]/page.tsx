@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowLeft, Star, Calendar, MessageCircle, MapPin, Clock, Mail, Award, TrendingUp } from "lucide-react"
+import PostImages from "../../components/post-images"
 
 const typeColors = {
   pedir: "bg-blue-100 text-blue-800 border-blue-200",
@@ -163,17 +164,8 @@ export default function PublicProfilePage({
                         <p className="text-gray-600 mb-4">{post.description}</p>
 
                         {/* Images */}
-                        {post.images.length > 0 && (
-                          <div className="grid grid-cols-2 gap-2 mb-4">
-                            {post.images.map((image: string, index: number) => (
-                              <img
-                                key={index}
-                                src={image || "/placeholder.svg"}
-                                alt={`Imagen ${index + 1}`}
-                                className="rounded-lg object-cover w-full h-32"
-                              />
-                            ))}
-                          </div>
+                        {post.images && post.images.length > 0 && (
+                          <PostImages images={post.images} postTitle={post.title} />
                         )}
 
                         <div className="flex items-center justify-between">
