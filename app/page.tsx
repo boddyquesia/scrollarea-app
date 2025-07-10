@@ -4,9 +4,8 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -14,17 +13,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,10 +25,8 @@ import {
   Search,
   Plus,
   MessageCircle,
-  Clock,
   Filter,
   Camera,
-  Flag,
   X,
   Home,
   Mail,
@@ -54,6 +40,8 @@ import LocationSettings from "./components/location-settings"
 import AuthPage from "./auth/page"
 import ProfilePage from "./profile/page"
 import PublicProfilePage from "./profile/[userId]/page"
+import PostCard from "./components/post-card"
+import ExpiringPostsNotification from "./components/expiring-posts-notification"
 
 // Simulamos coordenadas para diferentes códigos postales de Madrid
 const postalCodeCoordinates: Record<string, { lat: number; lng: number; area: string }> = {
@@ -197,24 +185,31 @@ export default function CommunityApp({ onStartConversation }: CommunityAppProps)
       postalCode: userLocation.postalCode || "28001",
     }
 
-    // Llamada a API real:
-    // const response = await fetch('/api/posts', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(postData)
-    // })
-    // const newPost = await response.json()
+    // Por ahora, agregar localmente con las nuevas propiedades:
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 30)
 
-    // Por ahora, agregar localmente:
     const post = {
-      id: Date.now(),
+      id: Date.now().toString(),
       ...newPost,
-      user: currentUser,
+      user: {
+        id: currentUser.id,
+        name: currentUser.name,
+        avatar_url: currentUser.avatar_url,
+        initials: currentUser.initials,
+        rating: currentUser.rating || 5.0,
+      },
       coordinates: postData.coordinates,
-      postalCode: postData.postalCode,
+      postal_code: postData.postalCode,
       timeAgo: "hace unos momentos",
       responses: 0,
+      responses_count: 0,
       reports: 0,
+      reports_count: 0,
+      expires_at: expiresAt.toISOString(),
+      is_expired: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }
 
     setPosts([post, ...posts])
@@ -235,17 +230,33 @@ export default function CommunityApp({ onStartConversation }: CommunityAppProps)
     setNewPost({ ...newPost, images: updatedImages })
   }
 
-  const handleReport = (postId: number) => {
+  const handleReport = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Contenido inapropiado" }),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        console.log("✅ Post reported successfully")
+      }
+    } catch (error) {
+      console.error("Error reporting post:", error)
+    }
+
+    // Fallback local para demo
     setPosts(
       (prevPosts) =>
         prevPosts
           .map((post) => {
             if (post.id === postId) {
-              const newReports = post.reports + 1
+              const newReports = (post.reports_count || post.reports || 0) + 1
               if (newReports >= 3) {
                 return null
               }
-              return { ...post, reports: newReports }
+              return { ...post, reports: newReports, reports_count: newReports }
             }
             return post
           })
@@ -315,6 +326,63 @@ export default function CommunityApp({ onStartConversation }: CommunityAppProps)
     } else {
       setSelectedUserId(userId)
       setCurrentView("publicProfile")
+    }
+  }
+
+  const handleUpdatePost = async (postId: string, updates: any) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        // Actualizar el post en el estado local
+        setPosts(posts.map((post) => (post.id === postId ? { ...post, ...updates } : post)))
+        console.log("✅ Post updated successfully")
+      }
+    } catch (error) {
+      console.error("Error updating post:", error)
+    }
+  }
+
+  const handleDeletePost = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}`, {
+        method: "DELETE",
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        // Remover el post del estado local
+        setPosts(posts.filter((post) => post.id !== postId))
+        console.log("✅ Post deleted successfully")
+      }
+    } catch (error) {
+      console.error("Error deleting post:", error)
+    }
+  }
+
+  const handleExtendPost = async (postId: string) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}/extend`, {
+        method: "POST",
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        // Actualizar el post en el estado local
+        setPosts(
+          posts.map((post) =>
+            post.id === postId ? { ...post, expires_at: data.post.expires_at, is_expired: false } : post,
+          ),
+        )
+        console.log("✅ Post extended successfully")
+      }
+    } catch (error) {
+      console.error("Error extending post:", error)
     }
   }
 
@@ -544,104 +612,25 @@ export default function CommunityApp({ onStartConversation }: CommunityAppProps)
         ) : (
           <div className="space-y-4">
             {filteredPosts.map((post) => (
-              <Card key={post.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <Avatar
-                        className="h-10 w-10 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all"
-                        onClick={() => handleViewProfile(post.user.id)}
-                      >
-                        <AvatarImage src={post.user.avatar || "/placeholder.svg"} alt={post.user.name} />
-                        <AvatarFallback>{post.user.initials}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p
-                          className="font-medium text-sm cursor-pointer hover:text-blue-600 transition-colors"
-                          onClick={() => handleViewProfile(post.user.id)}
-                        >
-                          {post.user.name}
-                        </p>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <MapPin className="h-3 w-3" />
-                          <span>
-                            {userLocation.method !== "none" ? formatDistance(post.distance) : `CP ${post.postalCode}`}
-                          </span>
-                          <span>•</span>
-                          <Clock className="h-3 w-3" />
-                          <span>{post.timeAgo}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className={typeColors[post.type as keyof typeof typeColors]}>
-                        {typeLabels[post.type as keyof typeof typeLabels]}
-                      </Badge>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-400 hover:text-red-500">
-                            <Flag className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Reportar publicación</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              ¿Estás seguro de que quieres reportar esta publicación como inapropiada?
-                              {post.reports > 0 &&
-                                ` Esta publicación ya tiene ${post.reports} reporte${post.reports > 1 ? "s" : ""}.`}
-                              {post.reports >= 2 && " Un reporte más y será eliminada automáticamente."}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleReport(post.id)}
-                              className="bg-red-600 hover:bg-red-700"
-                            >
-                              Reportar
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <h3 className="font-semibold text-lg mb-2">{post.title}</h3>
-                  <p className="text-gray-600 mb-4">{post.description}</p>
-
-                  {/* Images */}
-                  {post.images.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                      {post.images.map((image, index) => (
-                        <img
-                          key={index}
-                          src={image || "/placeholder.svg"}
-                          alt={`Imagen ${index + 1}`}
-                          className="rounded-lg object-cover w-full h-32"
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <Button variant="outline" size="sm" className="flex items-center gap-2 bg-transparent">
-                      <MessageCircle className="h-4 w-4" />
-                      <span>
-                        {post.responses} respuesta{post.responses !== 1 ? "s" : ""}
-                      </span>
-                    </Button>
-                    <Button size="sm" onClick={() => handleContact(post.user.id, post.user.name, post.title)}>
-                      Contactar
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              <PostCard
+                key={post.id}
+                post={post}
+                currentUserId={currentUser.id}
+                userLocation={userLocation}
+                onContact={handleContact}
+                onViewProfile={handleViewProfile}
+                onReport={handleReport}
+                onUpdate={handleUpdatePost}
+                onDelete={handleDeletePost}
+                onExtend={handleExtendPost}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {/* Expiring Posts Notification */}
+      {currentUser && <ExpiringPostsNotification userId={currentUser.id} />}
 
       {/* Location Settings Dialog */}
       <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
